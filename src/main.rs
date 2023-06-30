@@ -1,35 +1,40 @@
 use sfml::graphics::{
     Color, RectangleShape, RenderTarget, RenderWindow, Shape, Sprite, Text, Transformable, View, CircleShape
 };
-use sfml::system::{Clock, Vector2f};
+use sfml::system::{Clock, Vector2f, Vector2i};
 use sfml::window::{mouse, ContextSettings, Event, Key, Style};
 use std::{thread, time};
+use std::ops::Index;
 use sfml::graphics::ShaderType::Vertex;
 
 struct Dot<'a> {
     shape:  CircleShape<'a>,
-    position: Vector2f,
+    position: Vector2i,
     size: i32,
-    color: Color
+    colorIndex: usize
 }
 impl <'a>Dot<'a> {
 
-    fn new(position: Vector2f, color: Color) -> Dot<'a> {
-        let size = 30;
+    fn new(x : i32, y: i32, size: i32, colorIndex: usize) -> Dot<'a> {
         let mut d = Dot {
-            position: position,
+            position: Vector2i::new(x,y),
             size: size,
-            color: color,
+            colorIndex: colorIndex,
             shape:  CircleShape::new(size as f32, 100),
         };
-        d.shape.set_fill_color(color);
-        d.shape.set_position(position);
         return d;
     }
-    fn setPos(&mut self, x: i32, y: i32) {
-        self.shape.set_position(Vector2f::new((x - self.size) as f32, (y - self.size) as f32));
+    fn changeSize(&mut self, delta: i32) {
+        self.size += delta;
     }
-    fn draw(&self, window: &mut RenderWindow) {
+    fn setPos(&mut self, x: i32, y: i32) {
+        self.position = Vector2i::new(x, y);
+    }
+    fn draw(&mut self, window: &mut RenderWindow, colors: &Vec<Color>) {
+        self.colorIndex = self.colorIndex % colors.len();
+        self.shape.set_fill_color(colors[self.colorIndex]);
+        self.shape.set_radius(self.size as f32);
+        self.shape.set_position(Vector2f::new((self.position.x - self.size) as f32,  (self.position.y - self.size) as f32));
         window.draw(&self.shape)
     }
 }
@@ -37,6 +42,17 @@ impl <'a>Dot<'a> {
 
 
 fn main() {
+
+    let mut colors = Vec::new();
+    colors.push(Color::WHITE);
+    colors.push(Color::RED);
+    colors.push(Color::GREEN);
+    colors.push(Color::BLUE);
+    colors.push(Color::YELLOW);
+    colors.push(Color::MAGENTA);
+    colors.push(Color::CYAN);
+    let mut currentColor = 0;
+
     // Create the window of the application
     let mut window = RenderWindow::new(
         (3840, 2160),
@@ -47,7 +63,10 @@ fn main() {
     window.set_framerate_limit(60);
     window.set_vertical_sync_enabled(true);
 
-    let mut dot = Dot::new(Vector2f::new(0 as f32, 0 as f32), Color::WHITE);
+    let mut dots = Vec::new();
+    dots.push(Dot::new(0, 0, 32, currentColor));
+
+    let mut mousePressed = false;
 
     while window.is_open() {
 
@@ -57,9 +76,29 @@ fn main() {
                     if Key::Escape == code {
                         window.close()
                     }
+                    else if (Key::Space == code) {
+                        let c=  colors.pop().unwrap();
+                        colors.insert(0, c);
+                    }
                 }
                 Event::MouseMoved { x, y} => {
-                    dot.setPos(x, y);
+                    let mouseDot = dots.first_mut().unwrap();
+                    mouseDot.setPos(x, y);
+                    if (mousePressed) {
+                        let size = mouseDot.size;
+                        dots.push(Dot::new(x, y, size, currentColor));
+                        currentColor = (currentColor + 1) % colors.len();
+                    }
+                }
+                Event::MouseButtonPressed { x, y, .. } => {
+                    mousePressed = true;
+                }
+                Event::MouseButtonReleased { .. } => {
+                    mousePressed = false
+                }
+                Event::MouseWheelScrolled { delta, ..} => {
+                    dots.first_mut().unwrap().changeSize(delta as i32);
+                    //dots.iter_mut().for_each(|d| d.changeSize(delta as i32));
                 }
                 Event::Closed => {
                     window.close()
@@ -69,7 +108,7 @@ fn main() {
         }
 
         window.clear(Color::BLACK);
-        dot.draw(&mut window);
+        dots.iter_mut().for_each(|d| d.draw(&mut window, &colors));
         window.display()
     }
 
