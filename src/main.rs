@@ -1,93 +1,165 @@
-use sfml::graphics::{
-    Color, RectangleShape, RenderTarget, RenderWindow, Shape, Sprite, Text, Transformable, View, CircleShape
-};
-use sfml::system::{Clock, Vector2f, Vector2i};
+use sfml::graphics::{Color, RectangleShape, RenderTarget, RenderWindow, Shape, Sprite, Text, Transformable, View, CircleShape, Drawable};
+use sfml::system::{Clock, Time, Vector2f, Vector2i, Vector2u};
 use sfml::window::{mouse, ContextSettings, Event, Key, Style};
 use std::{thread, time};
-use std::ops::Index;
+use std::ops::{Add, Index, Mul};
 use sfml::graphics::ShaderType::Vertex;
 
 struct Dot<'a> {
     shape:  CircleShape<'a>,
-    position: Vector2i,
+    position: Vector2f,
     size: i32,
-    colorIndex: usize
+    colorIndex: usize,
+    mass: f32,
+    forces: Vec<Vector2f>,
+    speed: Vector2f
 }
-impl <'a>Dot<'a> {
 
+impl <'a>Dot<'a> {
     fn new(x : i32, y: i32, size: i32, colorIndex: usize) -> Dot<'a> {
         let mut d = Dot {
-            position: Vector2i::new(x,y),
+            position: Vector2f::new(x as f32,y as f32),
             size: size,
             colorIndex: colorIndex,
             shape:  CircleShape::new(size as f32, 100),
+            mass: 1f32,
+            forces: Vec::new(),
+            speed: Vector2f::new(0f32, 0f32)
         };
+        d.forces.push(Vector2f::new(0f32, 9.8f32));
         return d;
     }
     fn changeSize(&mut self, delta: i32) {
         self.size += delta;
     }
     fn setPos(&mut self, x: i32, y: i32) {
-        self.position = Vector2i::new(x, y);
+        self.position = Vector2f::new(x as f32, y as f32);
     }
-    fn draw(&mut self, window: &mut RenderWindow, colors: &Vec<Color>) {
-        self.colorIndex = self.colorIndex % colors.len();
-        self.shape.set_fill_color(colors[self.colorIndex]);
+    fn calculateNewPos(&mut self, elapsedTime: f32)  {
+//        let totalForce = self.forces.iter().reduce(|a, b| a.add(b)).unwrap_or(&Vector2f::new(0f32, 0f32));
+        let totalForce = Vector2f::new(0f32, 1f32);
+        let acc = Vector2f::new(totalForce.x * self.mass, totalForce.y * self.mass);
+        self.speed = self.speed.add(acc.mul(elapsedTime));
+        self.position = self.position.add(self.speed);
+    }
+    fn draw(&mut self, screen: &mut Screen) {
+        self.colorIndex = self.colorIndex % screen.colors.len();
+        self.shape.set_fill_color(screen.colors[self.colorIndex]);
         self.shape.set_radius(self.size as f32);
-        self.shape.set_position(Vector2f::new((self.position.x - self.size) as f32,  (self.position.y - self.size) as f32));
-        window.draw(&self.shape)
+        self.shape.set_position(Vector2f::new((self.position.x as i32 - self.size) as f32,  screen.translate_y(self.position.y as i32 + self.size)));
+        screen.drawObject(&self.shape)
     }
 }
 
 
 
-fn main() {
+struct Screen {
+    window: RenderWindow,
+    colors: Vec<Color>,
+    size: Vector2u
+}
 
-    let mut colors = Vec::new();
-    colors.push(Color::WHITE);
-    colors.push(Color::RED);
-    colors.push(Color::GREEN);
-    colors.push(Color::BLUE);
-    colors.push(Color::YELLOW);
-    colors.push(Color::MAGENTA);
-    colors.push(Color::CYAN);
+impl Screen {
+    fn new(width: u32, height: u32) -> Screen {
+        let mut s = Screen {
+            window: RenderWindow::new(
+            (width, height),
+            "Graphics",
+            Style::FULLSCREEN,
+            &ContextSettings::default(),
+            ),
+            colors: Vec::new(),
+            size: Vector2u::new(width, height)
+        };
+        s.colors.push(Color::WHITE);
+        s.colors.push(Color::RED);
+        s.colors.push(Color::GREEN);
+        s.colors.push(Color::BLUE);
+        s.colors.push(Color::YELLOW);
+        s.colors.push(Color::MAGENTA);
+        s.colors.push(Color::CYAN);
+
+        s.window.set_framerate_limit(60);
+        s.window.set_vertical_sync_enabled(true);
+        s
+    }
+
+    fn translate_y(&self, posY: i32) -> f32 {
+        self.size.y as f32 - posY as f32
+    }
+
+    fn color_cycle(&mut self) {
+        let c =  self.colors.pop().unwrap();
+        self.colors.insert(0, c);
+    }
+
+    fn drawObject(&mut self, object: &dyn Drawable) {
+        self.window.draw(object)
+    }
+
+    fn draw(&mut self, dots: &mut Vec<Dot>) {
+        dots.iter_mut().for_each(|d| d.draw(self));
+    }
+}
+
+
+fn calculateNewPositions(elapsedTime: Time, dots: &mut Vec<Dot>) {
+    dots.iter_mut().for_each(|d|
+        if (d.colorIndex  >= 0) {
+            if (d.position.y <= 1000f32 && d.speed.y < 0f32) {
+                if (d.speed.y.abs() < 0.2f32) {
+                    d.speed.y = 0f32;
+                    d.position.y = 1000f32;
+                }
+                else {
+                    d.speed.y *= -0.85f32;
+                }
+            }
+            let accelY = -2000f32;
+            let changeInSpeedY = accelY * elapsedTime.as_seconds();
+            println!("{}", changeInSpeedY);
+            d.speed.y +=  changeInSpeedY;
+            println!("dsy {}", d.speed.y);
+            d.position.y = d.position.y + d.speed.y;
+        }
+    )
+}
+
+
+
+
+fn main() {
+    let mut screen = Screen::new(3840, 2160);
+
+    let mut clock = Clock::start();
     let mut currentColor = 0;
 
     // Create the window of the application
-    let mut window = RenderWindow::new(
-        (3840, 2160),
-        "Graphics",
-        Style::FULLSCREEN,
-        &ContextSettings::default(),
-    );
-    window.set_framerate_limit(60);
-    window.set_vertical_sync_enabled(true);
 
     let mut dots = Vec::new();
     dots.push(Dot::new(0, 0, 32, currentColor));
 
     let mut mousePressed = false;
+    while screen.window.is_open() {
 
-    while window.is_open() {
-
-        while let Some(event) = window.poll_event() {
+        while let Some(event) = screen.window.poll_event() {
+            let elapsedTime = clock.elapsed_time();
             match(event) {
                 Event::KeyPressed { code, .. }=> {
                     if Key::Escape == code {
-                        window.close()
+                        screen.window.close()
                     }
                     else if (Key::Space == code) {
-                        let c=  colors.pop().unwrap();
-                        colors.insert(0, c);
+                        screen.color_cycle();
                     }
                 }
                 Event::MouseMoved { x, y} => {
                     let mouseDot = dots.first_mut().unwrap();
-                    mouseDot.setPos(x, y);
+                    mouseDot.setPos(x, screen.translate_y(y) as i32);
                     if (mousePressed) {
                         let size = mouseDot.size;
-                        dots.push(Dot::new(x, y, size, currentColor));
-                        currentColor = (currentColor + 1) % colors.len();
+                        dots.push(Dot::new(x, screen.translate_y(y) as i32, size, currentColor));
+                        currentColor = (currentColor + 1) % screen.colors.len();
                     }
                 }
                 Event::MouseButtonPressed { x, y, .. } => {
@@ -97,19 +169,21 @@ fn main() {
                     mousePressed = false
                 }
                 Event::MouseWheelScrolled { delta, ..} => {
-                    dots.first_mut().unwrap().changeSize(delta as i32);
-                    //dots.iter_mut().for_each(|d| d.changeSize(delta as i32));
+                   // dots.first_mut().unwrap().changeSize(delta as i32);
+                    dots.iter_mut().for_each(|d| d.changeSize(delta as i32));
                 }
                 Event::Closed => {
-                    window.close()
+                    screen.window.close()
                 }
                 _ => { println!("Event") }
             }
         }
 
-        window.clear(Color::BLACK);
-        dots.iter_mut().for_each(|d| d.draw(&mut window, &colors));
-        window.display()
+        screen.window.clear(Color::BLACK);
+        calculateNewPositions(clock.elapsed_time(), &mut dots);
+        screen.draw( &mut dots);
+        screen.window.display();
+        clock.restart();
     }
 
 
