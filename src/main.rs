@@ -1,9 +1,12 @@
 use sfml::graphics::{Color, RectangleShape, RenderTarget, RenderWindow, Shape, Sprite, Text, Transformable, View, CircleShape, Drawable};
-use sfml::system::{Clock, Time, Vector2f, Vector2i, Vector2u};
+use sfml::system::{Clock, sleep, Time, Vector2f, Vector2i, Vector2u};
 use sfml::window::{mouse, ContextSettings, Event, Key, Style};
 use std::{thread, time};
 use std::ops::{Add, Index, Mul};
 use sfml::graphics::ShaderType::Vertex;
+use tiny_skia::Point;
+
+//https://github.com/jeremyletang/rust-sfml/blob/master/examples/music-stream.rs
 
 struct Dot<'a> {
     shape:  CircleShape<'a>,
@@ -16,7 +19,7 @@ struct Dot<'a> {
 }
 
 impl <'a>Dot<'a> {
-    fn new(x : i32, y: i32, size: i32, colorIndex: usize) -> Dot<'a> {
+    fn new(x : i32, y: i32, size: i32, colorIndex: usize, speed: Vector2i) -> Dot<'a> {
         let mut d = Dot {
             position: Vector2f::new(x as f32,y as f32),
             size: size,
@@ -24,7 +27,7 @@ impl <'a>Dot<'a> {
             shape:  CircleShape::new(size as f32, 100),
             mass: 1f32,
             forces: Vec::new(),
-            speed: Vector2f::new(0f32, 0f32)
+            speed: Vector2f::new(speed.x as f32, -speed.y as f32)
         };
         d.forces.push(Vector2f::new(0f32, 9.8f32));
         return d;
@@ -100,6 +103,7 @@ impl Screen {
     fn draw(&mut self, dots: &mut Vec<Dot>) {
         dots.iter_mut().for_each(|d| d.draw(self));
     }
+
 }
 
 
@@ -109,18 +113,22 @@ fn calculateNewPositions(elapsedTime: Time, dots: &mut Vec<Dot>) {
             if (d.position.y <= 1000f32 && d.speed.y < 0f32) {
                 if (d.speed.y.abs() < 0.2f32) {
                     d.speed.y = 0f32;
+                    d.speed.x = 0f32;
                     d.position.y = 1000f32;
                 }
                 else {
                     d.speed.y *= -0.85f32;
                 }
             }
-            let accelY = -2000f32;
+            let accelY = -20f32;
+            let changeInSpeedX = 0f32;
             let changeInSpeedY = accelY * elapsedTime.as_seconds();
-            println!("{}", changeInSpeedY);
+            //println!("{}", changeInSpeedY);
+            d.speed.x += changeInSpeedX;
             d.speed.y +=  changeInSpeedY;
-            println!("dsy {}", d.speed.y);
-            d.position.y = d.position.y + d.speed.y;
+            //println!("dsy {}", d.speed.y);
+            d.position.y += d.speed.y;
+            d.position.x += d.speed.x;
         }
     )
 }
@@ -137,11 +145,14 @@ fn main() {
     // Create the window of the application
 
     let mut dots = Vec::new();
-    dots.push(Dot::new(0, 0, 32, currentColor));
+    //dots.push(Dot::new(0, 0, 32, currentColor, Vector2i::new(0,0)));
 
+    let mut lastMousePos = Vector2i::new(-1, -1);
+    let mut windSpeed = Vector2i::new(0,0);
     let mut mousePressed = false;
-    while screen.window.is_open() {
+    let mut size = 10;
 
+    while screen.window.is_open() {
         while let Some(event) = screen.window.poll_event() {
             let elapsedTime = clock.elapsed_time();
             match(event) {
@@ -154,13 +165,12 @@ fn main() {
                     }
                 }
                 Event::MouseMoved { x, y} => {
-                    let mouseDot = dots.first_mut().unwrap();
-                    mouseDot.setPos(x, screen.translate_y(y) as i32);
                     if (mousePressed) {
-                        let size = mouseDot.size;
-                        dots.push(Dot::new(x, screen.translate_y(y) as i32, size, currentColor));
+                        dots.push(Dot::new(x, screen.translate_y(y) as i32, size, currentColor, Vector2i::new(x - lastMousePos.x, y - lastMousePos.y)));
                         currentColor = (currentColor + 1) % screen.colors.len();
                     }
+                    lastMousePos.x = x;
+                    lastMousePos.y = y;
                 }
                 Event::MouseButtonPressed { x, y, .. } => {
                     mousePressed = true;
@@ -171,6 +181,7 @@ fn main() {
                 Event::MouseWheelScrolled { delta, ..} => {
                    // dots.first_mut().unwrap().changeSize(delta as i32);
                     dots.iter_mut().for_each(|d| d.changeSize(delta as i32));
+                    size += delta as i32;
                 }
                 Event::Closed => {
                     screen.window.close()
@@ -180,10 +191,13 @@ fn main() {
         }
 
         screen.window.clear(Color::BLACK);
-        calculateNewPositions(clock.elapsed_time(), &mut dots);
+        let timeSinceLastRender : Time = clock.elapsed_time();
+        println!("tslr {}", timeSinceLastRender.as_seconds());
+        calculateNewPositions(timeSinceLastRender, &mut dots);
         screen.draw( &mut dots);
         screen.window.display();
         clock.restart();
+        sleep(Time::milliseconds(1000 / 100))
     }
 
 
