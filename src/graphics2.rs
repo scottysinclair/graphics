@@ -9,27 +9,25 @@ use sfml::graphics::ShaderType::Vertex;
 use tiny_skia::Point;
 
 pub(crate) fn main2() {
-    let mut world = Rc::new(RefCell::new(World::new()));
-    let mut screen = Rc::new(RefCell::new(Screen::new()));
-
-    *screen.deref().borrow().world.borrow_mut() = Rc::downgrade(&world);
+    let mut world =World::new();
+    let mut screen = Screen::new();
 
     let mut ball = Ball::new();
-    world.deref().borrow_mut().add(ball);
+    world.add(ball);
 
     let font = Font::from_file("/usr/share/fonts/truetype/ubuntu/UbuntuMono-R.ttf").unwrap();
     let mut position_info = PositionText::new(&font);
 
 
     loop {
-        while let Some(event) = screen.deref().borrow_mut().renderWindow.poll_event() {
+        while let Some(event) = screen.renderWindow.poll_event() {
             match event {
                 Event::Closed
                 | Event::KeyPressed {
                     code: Key::Escape, ..
                 } => return,
                 Event::MouseMoved { x, y } => {
-                    world.deref().borrow_mut().things.first_mut().unwrap().set_position(Vector2f::new(x as f32, y as f32));
+                    world.things.first_mut().unwrap().set_position(Vector2f::new(x as f32, y as f32));
                     position_info.set_position(Vector2i::new(x, y));
 //                    position_info.set_position(Vector2i::new(window.size().x as i32, window.size().y as i32));
                 },
@@ -40,14 +38,13 @@ pub(crate) fn main2() {
             }
         }
 
-        screen.borrow_mut().clear(Color::BLACK);
-        screen.deref().borrow_mut().draw();
-        screen.deref().borrow_mut().display()
+        screen.clear(Color::BLACK);
+        screen.draw(&world);
+        screen.display()
     }
 }
 
-struct Screen<'s> {
-    world: RefCell<Weak<RefCell<World<'s>>>>,
+struct Screen {
     position: Vector2f,
     renderWindow: RenderWindow
 }
@@ -64,10 +61,9 @@ trait Thing {
     fn setSpeed(&mut self, speed: Vector2f);
 }
 
-impl<'s> Screen<'s> {
-    fn new() -> Screen<'s> {
+impl Screen {
+    fn new() -> Screen {
         let mut s = Screen {
-            world: RefCell::new(Weak::new()),
             position: Vector2f::new(0., 0.),
             renderWindow: RenderWindow::new(
                 (3840, 2400),
@@ -84,8 +80,8 @@ impl<'s> Screen<'s> {
     fn clear(&mut self, color: Color) {
         self.renderWindow.clear(color)
     }
-    fn draw(&mut self) {
-        self.world.borrow().upgrade().unwrap().borrow().things.iter().for_each(|t| self.renderWindow.draw(t));
+    fn draw(&mut self, world: &World) {
+        world.things.iter().for_each(|t| self.renderWindow.draw(t));
     }
     fn display(&mut self) {
         self.renderWindow.display()
