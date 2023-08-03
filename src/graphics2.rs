@@ -19,6 +19,7 @@ pub(crate) fn main2() {
     let mut mouse_pressed = false;
     let mut lastMouseWorldPos = Vector2f::new(-1., -1.);
     let mut followBall = -1i32;
+    let screen_speed = 5.;
 
     let font = Font::from_file("/usr/share/fonts/truetype/ubuntu/UbuntuMono-R.ttf").unwrap();
     let mut position_info = PositionText::new(&font);
@@ -43,22 +44,22 @@ pub(crate) fn main2() {
                 },
                 Event::KeyPressed { code, .. } => {
                     if Key::Up == code {
-                        screen.position.y += screen.scale * 1.;
+                        screen.position.y += screen.scale * screen_speed;
                         position_info.set_position(screen.position);
                         lastMouseWorldPos = screen.translate_to_world_coords(lastMouseWorldPos);
                     }
                     else if Key::Down == code {
-                        screen.position.y -= screen.scale * 1.;
+                        screen.position.y -= screen.scale * screen_speed;
                         position_info.set_position(screen.position);
                         lastMouseWorldPos = screen.translate_to_world_coords(lastMouseWorldPos);
                     }
                     if Key::Left == code {
-                        screen.position.x -= screen.scale * 1.;
+                        screen.position.x -= screen.scale * screen_speed;
                         position_info.set_position(screen.position);
                         lastMouseWorldPos = screen.translate_to_world_coords(lastMouseWorldPos);
                     }
                     else if Key::Right == code {
-                        screen.position.x += screen.scale * 1.;
+                        screen.position.x += screen.scale * screen_speed;
                         position_info.set_position(screen.position);
                         lastMouseWorldPos = screen.translate_to_world_coords(lastMouseWorldPos);
                     }
@@ -79,7 +80,7 @@ pub(crate) fn main2() {
 //                    position_info.set_position(Vector2i::new(width as i32, height as i32));
                 }
                 Event::MouseWheelScrolled { delta, .. } => {
-                    screen.scale += (delta * 0.1);
+                    screen.scale += (delta * 0.5);
                     position_info.set_position(Vector2f::new(screen.scale, 0.))
                 }
                 Event::MouseMoved { x, y } => {
@@ -130,16 +131,18 @@ impl Physics {
     }
     fn calculate(&self, world: &mut World, elapsedTime: Time) {
         world.things.iter_mut().for_each(|thing : &mut Ball| {
-            let forces = self.calculate_forces_on(&thing);
-            let totalForce = forces.iter().fold(Vector2f::new(0., 0.), |a, b| { a.add(*b) });
-            let accel = totalForce / thing.mass as f32;
-            thing.speed += accel * elapsedTime.as_seconds();
-            thing.set_position(thing.get_position() + thing.speed);
-            if (thing.position.y <= 10.) {
-                let normal = Vector2f::new(0., -1.);
-                let dot_product = (thing.speed.x * 0.) + (thing.speed.y * 1.);
-                thing.speed.x += ((2. * normal.x * dot_product) * thing.get_bounciness());
-                thing.speed.y += ((2. * normal.y * dot_product) * thing.get_bounciness());
+            if thing.position.x as i32 % 500 > 5 && thing.position.y as i32 % 500 > 5 {
+                let forces = self.calculate_forces_on(&thing);
+                let totalForce = forces.iter().fold(Vector2f::new(0., 0.), |a, b| { a.add(*b) });
+                let accel = totalForce / thing.mass as f32;
+                thing.speed += accel * elapsedTime.as_seconds();
+                thing.set_position(thing.get_position() + thing.speed);
+                if (thing.position.y <= 10.) {
+                    let normal = Vector2f::new(0., -1.);
+                    let dot_product = (thing.speed.x * 0.) + (thing.speed.y * 1.);
+                    thing.speed.x += ((2. * normal.x * dot_product) * thing.get_bounciness());
+                    thing.speed.y += ((2. * normal.y * dot_product) * thing.get_bounciness());
+                }
             }
         });
     }
