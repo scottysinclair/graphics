@@ -42,24 +42,25 @@ pub(crate) fn main2() {
                         return
                     }
                 },
-                Event::KeyPressed { code, .. } => {
+                Event::KeyPressed { code, shift, .. } => {
+                    let myscreen_speed = if shift  { screen_speed * 4. } else { screen_speed };
                     if Key::Up == code {
-                        screen.position.y += screen.scale * screen_speed;
+                        screen.position.y += screen.scale * myscreen_speed;
                         position_info.set_position(screen.position);
                         lastMouseWorldPos = screen.translate_to_world_coords(lastMouseWorldPos);
                     }
                     else if Key::Down == code {
-                        screen.position.y -= screen.scale * screen_speed;
+                        screen.position.y -= screen.scale * myscreen_speed;
                         position_info.set_position(screen.position);
                         lastMouseWorldPos = screen.translate_to_world_coords(lastMouseWorldPos);
                     }
                     if Key::Left == code {
-                        screen.position.x -= screen.scale * screen_speed;
+                        screen.position.x -= screen.scale * myscreen_speed;
                         position_info.set_position(screen.position);
                         lastMouseWorldPos = screen.translate_to_world_coords(lastMouseWorldPos);
                     }
                     else if Key::Right == code {
-                        screen.position.x += screen.scale * screen_speed;
+                        screen.position.x += screen.scale * myscreen_speed;
                         position_info.set_position(screen.position);
                         lastMouseWorldPos = screen.translate_to_world_coords(lastMouseWorldPos);
                     }
@@ -80,8 +81,13 @@ pub(crate) fn main2() {
 //                    position_info.set_position(Vector2i::new(width as i32, height as i32));
                 }
                 Event::MouseWheelScrolled { delta, .. } => {
+                    let old_center = screen.translate_to_world_coords(Vector2f::new(screen.renderWindow.size().x as f32 / 2., screen.renderWindow.size().y as f32 / 2.));
                     screen.scale += (delta * 0.5);
-                    position_info.set_position(Vector2f::new(screen.scale, 0.))
+                    let new_center = screen.translate_to_world_coords(Vector2f::new(screen.renderWindow.size().x as f32 / 2., screen.renderWindow.size().y as f32 / 2.));
+                    screen.position.x = old_center.x - (new_center.x - screen.position.x);
+                    screen.position.y = old_center.y - (new_center.y - screen.position.y);
+                    //position_info.set_position(Vector2f::new(screen.scale, 0.))
+                    position_info.set_position(old_center)
                 }
                 Event::MouseMoved { x, y } => {
                     if (mouse_pressed) {
@@ -130,8 +136,13 @@ impl Physics {
         }
     }
     fn calculate(&self, world: &mut World, elapsedTime: Time) {
+        let grid_size = 500;
+        let grid_tolerance = 3;
+        let mut new_balls = Vec::new();
         world.things.iter_mut().for_each(|thing : &mut Ball| {
-            if thing.position.x as i32 % 500 > 5 && thing.position.y as i32 % 500 > 5 {
+            let xdiff = thing.position.x as i32 % grid_size;
+            let ydiff = thing.position.y as i32 % grid_size;
+            if  (xdiff > grid_tolerance && xdiff < (grid_size - grid_tolerance)) &&  (ydiff > grid_tolerance && ydiff < (grid_size - grid_tolerance)) {
                 let forces = self.calculate_forces_on(&thing);
                 let totalForce = forces.iter().fold(Vector2f::new(0., 0.), |a, b| { a.add(*b) });
                 let accel = totalForce / thing.mass as f32;
@@ -145,6 +156,7 @@ impl Physics {
                 }
             }
         });
+        world.things.append(&mut new_balls);
     }
 
     fn calculate_forces_on(&self, thing: &Ball) -> Vec<Vector2f>{
@@ -207,6 +219,7 @@ struct World<'s> {
 
 trait Thing: Drawable {
     fn get_mass(&self) -> f32;
+    fn set_mass(&mut self, mass: f32);
     fn get_position(&self) -> Vector2f;
     fn set_position(&mut self, position: Vector2f);
     fn get_speed(&self) -> Vector2f;
@@ -303,6 +316,9 @@ impl<'s> Drawable for Ball<'s> {
 impl<'s> Thing for Ball<'s> {
     fn get_mass(&self) -> f32 {
         self.mass
+    }
+    fn set_mass(&mut self, mass: f32) {
+        self.mass = mass;
     }
     fn get_position(&self) -> Vector2f {
         self.position
