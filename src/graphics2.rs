@@ -1,13 +1,16 @@
-use sfml::graphics::{Color, RectangleShape, RenderTarget, RenderWindow, Shape, Sprite, Text, Transformable, View, CircleShape, Drawable, RenderStates, Font};
+use sfml::graphics::{Color, RectangleShape, RenderTarget, RenderWindow, Shape, Sprite, Text, Transformable, View, CircleShape, Drawable, RenderStates, Font, VertexBuffer, PrimitiveType, VertexBufferUsage, Vertex};
 use sfml::system::{Clock, SfStrConv, sleep, Time, Vector2, Vector2f, Vector2i, Vector2u};
 use sfml::window::{mouse, ContextSettings, Event, Key, Style};
 use std::{thread, time};
 use std::cell::RefCell;
 use std::ops::{Add, Deref, Index, Mul};
 use std::rc::{Rc, Weak};
-use sfml::graphics::ShaderType::Vertex;
-use tiny_skia::Point;
+use tiny_skia::{PathBuilder, Point, Stroke};
 use rand::Rng;
+use tiny_skia::PathSegment::LineTo;
+use crate::graphics2::core::{Ball, Screen, Thing, World};
+
+pub mod core;
 
 pub(crate) fn main2() {
     let mut world = World::new();
@@ -16,10 +19,14 @@ pub(crate) fn main2() {
     let mut rng = rand::thread_rng();
 
     let mut physics = Physics::new();
+    let mut grid = Grid::new(100., &screen);
+
+
     let mut mouse_pressed = false;
     let mut lastMouseWorldPos = Vector2f::new(-1., -1.);
     let mut followBall = -1i32;
-    let screen_speed = 5.;
+    let screen_move_speed = 5.;
+    let screen_zoom_speed = 1.;
 
     let font = Font::from_file("/usr/share/fonts/truetype/ubuntu/UbuntuMono-R.ttf").unwrap();
     let mut position_info = PositionText::new(&font);
@@ -43,7 +50,7 @@ pub(crate) fn main2() {
                     }
                 },
                 Event::KeyPressed { code, shift, .. } => {
-                    let myscreen_speed = if shift  { screen_speed * 4. } else { screen_speed };
+                    let myscreen_speed = if shift  { screen_move_speed * 4. } else { screen_move_speed };
                     if Key::Up == code {
                         screen.position.y += screen.scale * myscreen_speed;
                         position_info.set_position(screen.position);
@@ -82,7 +89,7 @@ pub(crate) fn main2() {
                 }
                 Event::MouseWheelScrolled { delta, .. } => {
                     let old_center = screen.translate_to_world_coords(Vector2f::new(screen.renderWindow.size().x as f32 / 2., screen.renderWindow.size().y as f32 / 2.));
-                    screen.scale += (delta * 0.5);
+                    screen.scale += (delta * screen_zoom_speed);
                     let new_center = screen.translate_to_world_coords(Vector2f::new(screen.renderWindow.size().x as f32 / 2., screen.renderWindow.size().y as f32 / 2.));
                     screen.position.x = old_center.x - (new_center.x - screen.position.x);
                     screen.position.y = old_center.y - (new_center.y - screen.position.y);
@@ -121,9 +128,28 @@ pub(crate) fn main2() {
         screen.clear(Color::BLACK);
         screen.drawWorld(&mut world);
         screen.drawDirect(&position_info);
+
+        //draw_line(&mut screen);
+
+        grid.draw_on_screen(&mut screen);
+
         screen.display()
     }
 }
+
+fn draw_line(screen: &mut Screen) {
+    let mut vertex_buffer =
+        VertexBuffer::new(PrimitiveType::LINES, 6, VertexBufferUsage::STATIC);
+
+    let vertices = [
+        Vertex::with_pos_color((200.0, 300.0).into(), Color::GREEN),
+        Vertex::with_pos_color((2000.0, 300.0).into(), Color::GREEN),
+    ];
+    vertex_buffer.update(&vertices, 0);
+    screen.drawDirect(&vertex_buffer);
+}
+
+
 
 struct Physics {
     accel_due_to_gravity: f32
@@ -136,7 +162,7 @@ impl Physics {
         }
     }
     fn calculate(&self, world: &mut World, elapsedTime: Time) {
-        let grid_size = 500;
+        let grid_size = 5000;
         let grid_tolerance = 3;
         let mut new_balls = Vec::new();
         world.things.iter_mut().for_each(|thing : &mut Ball| {
@@ -168,181 +194,7 @@ impl Physics {
 }
 
 
-struct Screen {
-    position: Vector2f,
-    scale: f32,
-    renderWindow: RenderWindow,
-}
 
-impl Screen {
-    pub(crate) fn translate_to_world_coords(&self, screen_coards: Vector2f) -> Vector2f {
-        /*
-         * translate the screen cooards to the screen at world position 0, then scale
-         *  40s, 20s, scale 2 ->  screen (40 * 2) + 20 = 100w
-         *  60s, 20s, scale 2 -> screen (60 * 2) + -20 = 100w
-         */
-        let world_x = screen_coards.x * self.scale + self.position.x;
-        /*
-         * translate the screen cooards to the screen at world position 0, then scale
-         *  40s, 20s, scale 2 ->  screen (40 * 2) + 20 = 100w
-         *  60s, 20s, scale 2 -> screen (60 * 2) + -20 = 100w
-         */
-        let screen_y = self.renderWindow.size().y as f32 - screen_coards.y;
-        let world_y = screen_y * self.scale + self.position.y;
-        Vector2f::new(world_x, world_y)
-    }
-
-    pub(crate) fn translate_to_screen_coords(&self, world_coords: Vector2f) -> Vector2f {
-        /*
-         * translate the world coords to the position of the screen, then scale
-         * 100w, 20s, scale 2 -> (100 - 20) / 2 = screen 40
-         * 100w, -20s, scale 2 -> (100 - -20) /  2 = screen 60
-         */
-        let screen_x = (world_coords.x - self.position.x) / self.scale;
-        /*
-         * translate the world coords to the position of the screen, then scale
-         * 100w, 20s,  scale 2 -> 100 - 20 / 2 = screen 40
-         * 100w, -20s, scale 2 -> 100 - -20 / 2 = screen 60
-         */
-        let mut screen_y = (world_coords.y - self.position.y) / self.scale;
-        /*
-         * the screen has inverted coords with 0 as top, so fix this
-         */
-        screen_y = self.renderWindow.size().y as f32 - screen_y;
-        Vector2f::new(screen_x, screen_y)
-    }
-}
-
-struct World<'s> {
-    things: Vec<Ball<'s>>,
-}
-
-trait Thing: Drawable {
-    fn get_mass(&self) -> f32;
-    fn set_mass(&mut self, mass: f32);
-    fn get_position(&self) -> Vector2f;
-    fn set_position(&mut self, position: Vector2f);
-    fn get_speed(&self) -> Vector2f;
-    fn set_speed(&mut self, speed: Vector2f);
-    fn get_bounciness(&self) -> f32;
-    fn draw_on_screen(&mut self, screen: &mut Screen);
-}
-
-impl Screen {
-    fn new(scale: f32) -> Screen {
-        let mut s = Screen {
-            position: Vector2f::new(0., 0.),
-            scale: scale,
-            renderWindow: RenderWindow::new(
-                (3840, 2400),
-       //         (1024, 768),
-                "Graphics",
-                Style::FULLSCREEN, //Style::CLOSE,
-                &ContextSettings::default(),
-            ),
-        };
-        s.renderWindow.set_position(Vector2i::new(500, 500));
-        s.renderWindow.set_framerate_limit(60);
-        s.renderWindow.set_vertical_sync_enabled(true);
-        s
-    }
-    fn clear(&mut self, color: Color) {
-        self.renderWindow.clear(color)
-    }
-    fn drawWorld(&mut self, world: &mut World) {
-        world.draw(self);
-    }
-    fn drawDirect(&mut self, thing: &dyn Drawable) {
-        self.renderWindow.draw(thing);
-    }
-    fn display(&mut self) {
-        self.renderWindow.display()
-    }
-}
-
-impl<'s> World<'s> {
-    fn new() -> World<'s> {
-        World {
-            things: Vec::new()
-        }
-    }
-    fn add(&mut self, ball: Ball<'s>) {
-        self.things.push(ball);
-    }
-    fn draw(&mut self, screen: &mut Screen) {
-        self.things.iter_mut().for_each(|t| t.draw_on_screen(screen));
-    }
-}
-
-
-impl<'s> Drawable for World<'s> {
-    fn draw<'a: 'shader, 'texture, 'shader, 'shader_texture>(&'a self, target: &mut dyn RenderTarget, states: &RenderStates<'texture, 'shader, 'shader_texture>) {
-        self.things.iter().for_each(|t| target.draw(t));
-    }
-}
-
-struct Ball<'s> {
-    //renderWindow: &'s RenderWindow,
-    circle: CircleShape<'s>,
-    mass: f32,
-    position: Vector2f,
-    speed: Vector2f,
-    bounciness: f32
-}
-
-
-impl<'s> Ball<'s> {
-    fn new(position: Vector2f, mass: f32, initial_speed: Vector2f) -> Self {
-        let radius = 10 as u8;
-        let mut circle = CircleShape::new(radius as f32, 50);
-        circle.set_position(Vector2f::new(0f32, 0f32));
-        Self {
-            //      renderWindow: renderWindow,
-            circle: circle,
-            mass: mass,
-            position: position,
-            speed: initial_speed,
-            bounciness: 0.98
-        }
-    }
-}
-
-impl<'s> Drawable for Ball<'s> {
-    fn draw<'a: 'shader, 'texture, 'shader, 'shader_texture>(&'a self, target: &mut dyn RenderTarget, states: &RenderStates<'texture, 'shader, 'shader_texture>) {
-        target.draw(&self.circle);
-    }
-}
-
-impl<'s> Thing for Ball<'s> {
-    fn get_mass(&self) -> f32 {
-        self.mass
-    }
-    fn set_mass(&mut self, mass: f32) {
-        self.mass = mass;
-    }
-    fn get_position(&self) -> Vector2f {
-        self.position
-    }
-    fn set_position(&mut self, new_position: Vector2f) {
-        self.position = new_position;
-    }
-    fn get_speed(&self) -> Vector2f {
-        self.speed
-    }
-    fn set_speed(&mut self, _: Vector2f) {
-    }
-    fn get_bounciness(&self) -> f32 {
-        self.bounciness
-    }
-    fn draw_on_screen(&mut self, screen: &mut Screen) {
-        //let y_position = self.renderWindow.size().y as i32 - self.position.y;
-        let screen_coords = screen.translate_to_screen_coords(self.position);
-        let radius_on_screen = self.mass as f32 / screen.scale;
-        self.circle.set_radius(radius_on_screen);
-        self.circle.set_position(Vector2f::new(screen_coords.x - radius_on_screen, screen_coords.y - radius_on_screen));
-        screen.drawDirect(self)
-    }
-}
 
 struct PositionText<'s> {
     text: Text<'s>,
@@ -362,5 +214,107 @@ impl<'s> PositionText<'s> {
 impl<'s> Drawable for PositionText<'s> {
     fn draw<'a: 'shader, 'texture, 'shader, 'shader_texture>(&'a self, target: &mut dyn RenderTarget, states: &RenderStates<'texture, 'shader, 'shader_texture>) {
         target.draw(&self.text);
+    }
+}
+
+struct Grid {
+    cell_size: f32,
+    lines_x: Vec<i32>,
+    lines_y: Vec<i32>,
+    buffers: Vec<VertexBuffer>,
+    screen_size: Vector2u
+}
+
+impl Grid {
+    fn new(cell_size: f32, screen: &Screen) -> Grid {
+        Grid {
+            cell_size: cell_size,
+            lines_x: Vec::new(),
+            lines_y: Vec::new(),
+            buffers: Vec::new(),
+            screen_size: screen.renderWindow.size()
+        }
+    }
+}
+
+impl Thing for Grid {
+    fn get_mass(&self) -> f32 {
+        0.
+    }
+
+    fn set_mass(&mut self, mass: f32) {
+    }
+
+    fn get_position(&self) -> Vector2f {
+        Vector2f::new(0., 0.)
+    }
+
+    fn set_position(&mut self, position: Vector2f) {
+    }
+
+    fn get_speed(&self) -> Vector2f {
+        Vector2f::new(0., 0.)
+    }
+
+    fn set_speed(&mut self, speed: Vector2f) {
+    }
+
+    fn get_bounciness(&self) -> f32 {
+        0.
+    }
+
+    fn draw_on_screen(&mut self, screen: &mut Screen) {
+        /*
+        let screen_bottom_left = Vector2f::new(0., self.screen_size.y as f32);
+        let world_bottom_left = screen.translate_to_screen_coords(screen_bottom_left );
+
+        let screen_bottom_right = Vector2f::new(screen.renderWindow.size().x as f32, screen.renderWindow.size().y as f32);
+        let world_bottom_right = screen.translate_to_screen_coords(screen_bottom_right );
+
+        let screen_top_left = Vector2f::new(0., 0.);
+        let world_top_left = screen.translate_to_screen_coords(screen_top_left );
+
+        let screen_top_right= Vector2f::new(screen.renderWindow.size().x as f32, 0.);
+        let world_top_right = screen.translate_to_screen_coords(screen_top_right );
+
+        let times_y_to_origin = world_bottom_left.y as i32 / self.cell_size as i32;
+        let start_y = 0.; //self.cell_size *  times_y_to_origin as f32;
+        self.lines_y.clear();
+        let mut current_y = start_y;
+        while(current_y < world_top_left.y) {
+            self.lines_y.push(screen.translate_to_screen_coords(Vector2f::new(0., current_y)).y as i32);
+            current_y += self.cell_size;
+        }
+
+        let times_x_to_origin = world_bottom_left.x as i32 / self.cell_size as i32;
+        let start_x = self.cell_size *  times_x_to_origin as f32;
+        self.lines_x.clear();
+        let mut current_x = start_x;
+        while(current_x < world_bottom_right.x) {
+            self.lines_x.push(screen.translate_to_screen_coords(Vector2f::new(current_x, 0.)).x as i32);
+            current_x += self.cell_size;
+        }
+         */
+        /*
+        self.buffers.clear();
+        self.lines_y.iter().for_each(|y| {
+            let mut vertex_buffer =
+                VertexBuffer::new(PrimitiveType::LINES, 6, VertexBufferUsage::STATIC);
+
+            let vertices = [
+                Vertex::with_pos_color((0., *y as f32).into(), Color::GREEN),
+                Vertex::with_pos_color((self.screen_size.x as f32, *y as f32).into(), Color::GREEN),
+            ];
+            vertex_buffer.update(&vertices, 0);
+            self.buffers.push(vertex_buffer)
+        });*/
+    }
+}
+
+impl Drawable for Grid {
+    fn draw<'a: 'shader, 'texture, 'shader, 'shader_texture>(&'a self, target: &mut dyn RenderTarget, states: &RenderStates<'texture, 'shader, 'shader_texture>) {
+        self.buffers.iter().for_each(|b| {
+            self.buffers.iter().for_each(|v|target.draw(v));
+        });
     }
 }
