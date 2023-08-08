@@ -21,7 +21,7 @@ fn main() {
     two_mutable_references_not_symultanious();
 
 
-    //main1();
+   // main1();
     main2();
 }
 

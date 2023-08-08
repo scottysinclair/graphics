@@ -1,4 +1,4 @@
-use sfml::graphics::{CircleShape, Color, Drawable, RenderStates, RenderTarget, RenderWindow, Transformable};
+use sfml::graphics::{CircleShape, Color, Drawable, RenderStates, RenderTarget, RenderWindow, Shape, Transformable};
 use sfml::system::{Vector2f, Vector2i};
 use sfml::window::{ContextSettings, Style};
 
@@ -30,10 +30,10 @@ Style::CLOSE,
     pub(crate) fn clear(&mut self, color: Color) {
         self.renderWindow.clear(color)
     }
-    pub(crate) fn drawWorld(&mut self, world: &mut World) {
+    pub(crate) fn draw_world(&mut self, world: &mut World) {
         world.draw(self);
     }
-    pub(crate) fn drawDirect(&mut self, thing: &dyn Drawable) {
+    pub(crate) fn draw_direct(&mut self, thing: &dyn Drawable) {
         self.renderWindow.draw(thing);
     }
     pub(crate) fn display(&mut self) {
@@ -119,6 +119,7 @@ impl<'s> Drawable for World<'s> {
 pub(crate) struct Ball<'s> {
     //renderWindow: &'s RenderWindow,
     circle: CircleShape<'s>,
+    color: Color,
     pub(crate) mass: f32,
     pub(crate) position: Vector2f,
     pub(crate) speed: Vector2f,
@@ -127,13 +128,16 @@ pub(crate) struct Ball<'s> {
 
 
 impl<'s> Ball<'s> {
-    pub(crate)  fn new(position: Vector2f, mass: f32, initial_speed: Vector2f) -> Self {
+    pub(crate)  fn new(position: Vector2f, mass: f32, initial_speed: Vector2f, color: Color) -> Self {
         let radius = 10 as u8;
         let mut circle = CircleShape::new(radius as f32, 50);
         circle.set_position(Vector2f::new(0f32, 0f32));
+        circle.set_fill_color(Color::BLUE);
+        circle.set_outline_color(color);
         Self {
             //      renderWindow: renderWindow,
             circle: circle,
+            color: color,
             mass: mass,
             position: position,
             speed: initial_speed,
@@ -175,6 +179,6 @@ impl<'s> Thing for Ball<'s> {
         let radius_on_screen = self.mass as f32 / screen.scale;
         self.circle.set_radius(radius_on_screen);
         self.circle.set_position(Vector2f::new(screen_coords.x - radius_on_screen, screen_coords.y - radius_on_screen));
-        screen.drawDirect(self)
+        screen.draw_direct(self)
     }
 }
