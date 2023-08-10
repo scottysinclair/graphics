@@ -190,6 +190,7 @@ impl Physics {
                     let dot_product = (thing.speed.x * 0.) + (thing.speed.y * 1.);
                     thing.speed.x += ((2. * normal.x * dot_product) * thing.get_bounciness());
                     thing.speed.y += ((2. * normal.y * dot_product) * thing.get_bounciness());
+                    thing.set_position(thing.get_position() + thing.speed);
                 }
                 else {
                     thing.set_position(thing.get_position() + thing.speed);
