@@ -177,9 +177,10 @@ impl Physics {
             let xdiff = thing.position.x as i32 % self.grid_size;
             let ydiff = thing.position.y as i32 % self.grid_size;
             let ensure_the_bounce = thing.position.y < self.grid_size as f32;
-            let on_a_grid_coord = xdiff > grid_tolerance && xdiff < (self.grid_size - grid_tolerance) &&  (ydiff > grid_tolerance && ydiff < (self.grid_size - grid_tolerance));
+            let not_on_a_grid_coord = xdiff > grid_tolerance && xdiff < (self.grid_size - grid_tolerance) &&  (ydiff > grid_tolerance && ydiff < (self.grid_size - grid_tolerance));
+            let outside_the_grid = thing.position.x < 0. || thing.position.y < 0.;
 
-            if (ensure_the_bounce || on_a_grid_coord) {
+            if (ensure_the_bounce || not_on_a_grid_coord || outside_the_grid) {
                 let forces = self.calculate_forces_on(&thing);
                 let totalForce = forces.iter().fold(Vector2f::new(0., 0.), |a, b| { a.add(*b) });
                 let accel = totalForce / thing.mass as f32;
@@ -250,7 +251,7 @@ impl Grid {
     }
     fn new_vertex_buffer(&self, x1: f32, y1: f32, x2: f32, y2: f32) -> VertexBuffer {
         let mut vertex_buffer =
-            VertexBuffer::new(PrimitiveType::LINES, 6, VertexBufferUsage::STATIC);
+            VertexBuffer::new(PrimitiveType::LINES, 2, VertexBufferUsage::STATIC);
 
         let vertices = [
             Vertex::with_pos_color((x1, y1).into(), self.color),
