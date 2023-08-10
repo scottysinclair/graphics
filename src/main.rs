@@ -12,17 +12,9 @@ pub mod graphics2;
 
 
 fn main() {
-    pass_by_copy();
-    move_ownership_through_assignment();
-    move_ownership_through_function_call();
-    borrow_string();
-    borrow_mut_string();
-    two_mutable_references_not_allowed();
-    two_mutable_references_not_symultanious();
-
-
-   // main1();
-    main2();
+    //rust_reference();
+    //graphics_program_1();
+    graphics_program_2();
 }
 
 

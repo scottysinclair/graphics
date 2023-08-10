@@ -137,8 +137,8 @@ fn calculateNewPositions<'a>(screen: &Screen, elapsedTime: Time, dots: &mut Vec<
                             if (pitch < 0.1f32) {
                                 pitch = 0.1f32;
                             }
-                            else if (pitch > 0.5) {
-                                pitch = 0.5;
+                            else if (pitch > 0.3) {
+                                pitch = 0.3;
                             }
                             s.set_pitch(pitch);
                             s.set_volume(100.);
@@ -160,7 +160,7 @@ fn calculateNewPositions<'a>(screen: &Screen, elapsedTime: Time, dots: &mut Vec<
 }
 
 
-pub(crate) fn main1() {
+pub(crate) fn graphics_program_1() {
      let buffer = SoundBuffer::from_file("sounds/ding.ogg").unwrap();
 //     let mut sound = Sound::with_buffer(&buffer);
   //  sound.play();

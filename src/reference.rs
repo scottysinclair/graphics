@@ -1,4 +1,13 @@
 
+pub(crate) fn rust_reference() {
+    pass_by_copy();
+    move_ownership_through_assignment();
+    move_ownership_through_function_call();
+    borrow_string();
+    borrow_mut_string();
+    two_mutable_references_not_allowed();
+    two_mutable_references_not_symultanious();
+}
 
 pub(crate) fn pass_by_copy() {
     fn inc(mut x: i32) { x = x + 1; }

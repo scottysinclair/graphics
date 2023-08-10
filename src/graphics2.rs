@@ -13,12 +13,12 @@ use crate::graphics2::core::{Ball, Screen, Thing, World};
 
 pub mod core;
 
-pub(crate) fn main2() {
-    let background_color = Color::rgb(91, 134, 171);
+pub(crate) fn graphics_program_2() {
+    let background_color = Color::rgb(167,183,255); // Color::rgb(91, 134, 171);
+    let grid_color = Color::rgb(130, 130, 130);
     let ball_color = Color::rgb(255, 253, 197);
-    let grid_color = Color::rgb(93, 65, 53);
 
-    let grid_size = 600;
+    let grid_size = 2000;
 
     let mut world = World::new();
     let mut screen = Screen::new(3.);
@@ -295,21 +295,21 @@ impl Thing for Grid {
 
         let times_y_to_origin = world_bottom_left.y as i32 / self.cell_size as i32;
         let start_y = self.cell_size *  times_y_to_origin as f32;
-        let mut current_y = start_y;
-        let max_lines = 1000;
+        let mut current_y = 0.;
+        let max_lines = 9000;
 
         while(self.buffers.len() < max_lines && current_y < world_top_left.y) {
-            let y = screen.translate_to_screen_coords(Vector2f::new(0., current_y)).y;
-            self.buffers.push( self.new_vertex_buffer(0., y, screen.renderWindow.size().x as f32, y) );
+            let coord = screen.translate_to_screen_coords(Vector2f::new(0., current_y));
+            self.buffers.push( self.new_vertex_buffer(coord.x, coord.y, screen.renderWindow.size().x as f32, coord.y) );
             current_y += self.cell_size;
         }
 
         let times_x_to_origin = world_bottom_left.x as i32 / self.cell_size as i32;
         let start_x = self.cell_size *  times_x_to_origin as f32;
-        let mut current_x = start_x;
+        let mut current_x = 0.;
         while(self.buffers.len() < max_lines && current_x < world_bottom_right.x) {
-            let x = screen.translate_to_screen_coords(Vector2f::new(current_x, 0.)).x;
-            self.buffers.push( self.new_vertex_buffer(x, 0 as f32, x, screen.renderWindow.size().y as f32) );
+            let coord = screen.translate_to_screen_coords(Vector2f::new(current_x, 0.));
+            self.buffers.push( self.new_vertex_buffer(coord.x, coord.y, coord.x, 0.) );
             current_x += self.cell_size;
         }
         screen.draw_direct(self);
