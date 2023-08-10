@@ -9,7 +9,7 @@ use std::rc::{Rc, Weak};
 use tiny_skia::{PathBuilder, Point, Stroke};
 use rand::Rng;
 use tiny_skia::PathSegment::LineTo;
-use crate::graphics2::core::{Ball, Screen, Thing, World};
+use crate::graphics2::core::{Screen, Thing, World};
 
 pub mod core;
 
@@ -41,7 +41,7 @@ pub(crate) fn graphics_program_2() {
 
     fn add_ball(screen: &Screen, mass: i32, world: &mut World, x: i32, y: i32, initial_speed: Vector2f, color: Color) {
         let world_coords = screen.translate_to_world_coords(Vector2f::new(x as f32, y as f32));
-        world.add(Ball::new(world_coords, mass as f32, initial_speed, color) );
+        world.add(Box::new(Ball::new(world_coords, mass as f32, initial_speed, color) ));
     }
 
     loop {
@@ -121,7 +121,7 @@ pub(crate) fn graphics_program_2() {
         physics.calculate(&mut world, elapsedTime);
 
         if (followBall >= 0) {
-            let pos = world.things.get(followBall as usize).unwrap().position;
+            let pos = world.things.get(followBall as usize).unwrap().get_position();
             /*
              * get the width of the screen in world coords
              */
@@ -173,37 +173,39 @@ impl Physics {
     fn calculate(&self, world: &mut World, elapsedTime: Time) {
         let grid_tolerance = 5;
         let mut new_balls = Vec::new();
-        world.things.iter_mut().for_each(|thing : &mut Ball| {
-            let xdiff = thing.position.x as i32 % self.grid_size;
-            let ydiff = thing.position.y as i32 % self.grid_size;
-            let ensure_the_bounce = thing.position.y < grid_tolerance as f32 * 2.;
+        world.things.iter_mut().for_each(|t | {
+            let thing = t.as_mut();
+            let xdiff = thing.get_position().x as i32 % self.grid_size;
+            let ydiff = thing.get_position().y as i32 % self.grid_size;
+            let ensure_the_bounce = thing.get_position().y < grid_tolerance as f32 * 2.;
             let not_on_a_grid_coord = xdiff > grid_tolerance && xdiff < (self.grid_size - grid_tolerance) &&  (ydiff > grid_tolerance && ydiff < (self.grid_size - grid_tolerance));
-            let outside_the_grid = thing.position.x < 0. || thing.position.y < 0.;
+            let outside_the_grid = thing.get_position().x < 0. || thing.get_position().y < 0.;
 
             if (ensure_the_bounce || not_on_a_grid_coord || outside_the_grid) {
-                let forces = self.calculate_forces_on(&thing);
+                let forces = self.calculate_forces_on(thing);
                 let totalForce = forces.iter().fold(Vector2f::new(0., 0.), |a, b| { a.add(*b) });
-                let accel = totalForce / thing.mass as f32;
-                thing.speed += accel * elapsedTime.as_seconds();
-                let new_pos = thing.get_position() + thing.speed;
-                if (thing.position.x >= 0. && new_pos.y < 0. && thing.position.y >= 0.) {
+                let accel = totalForce / thing.get_mass() as f32;
+                thing.set_speed(thing.get_speed() + accel * elapsedTime.as_seconds());
+                let new_pos = thing.get_position() + thing.get_speed();
+                if (thing.get_position().x >= 0. && new_pos.y < 0. && thing.get_position().y >= 0.) {
                     let normal = Vector2f::new(0., -1.);
-                    let dot_product = (thing.speed.x * 0.) + (thing.speed.y * 1.);
-                    thing.speed.x += ((2. * normal.x * dot_product) * thing.get_bounciness());
-                    thing.speed.y += ((2. * normal.y * dot_product) * thing.get_bounciness());
-                    thing.set_position(thing.get_position() + thing.speed);
+                    let dot_product = (thing.get_speed().x * 0.) + (thing.get_speed().y * 1.);
+                    let new_speed_x = thing.get_speed().x + (2. * normal.x * dot_product) * thing.get_bounciness();
+                    let new_speed_y = thing.get_speed().y + (2. * normal.y * dot_product) * thing.get_bounciness();
+                    thing.set_speed(Vector2f::new(new_speed_x, new_speed_y));
+                    thing.set_position(thing.get_position() + thing.get_speed());
                 }
                 else {
-                    thing.set_position(thing.get_position() + thing.speed);
+                    thing.set_position(thing.get_position() + thing.get_speed());
                 }
             }
         });
         world.things.append(&mut new_balls);
     }
 
-    fn calculate_forces_on(&self, thing: &Ball) -> Vec<Vector2f>{
+    fn calculate_forces_on(&self, thing: &dyn Thing) -> Vec<Vector2f>{
         let mut forces = Vec::new();
-        forces.push(Vector2f::new(0., self.accel_due_to_gravity * thing.mass));
+        forces.push(Vector2f::new(0., self.accel_due_to_gravity * thing.get_mass()));
         //forces.push(Vector2f::new(800., 0.));
         return forces;
     }
@@ -262,7 +264,7 @@ impl Grid {
     }
 }
 
-impl Thing for Grid {
+impl <'s>Thing<'s> for Grid {
     fn get_mass(&self) -> f32 {
         0.
     }
@@ -287,6 +289,8 @@ impl Thing for Grid {
     fn get_bounciness(&self) -> f32 {
         0.
     }
+
+
 
     fn draw_on_screen(&mut self, screen: &mut Screen) {
         self.buffers.clear();
@@ -322,6 +326,10 @@ impl Thing for Grid {
         }
         screen.draw_direct(self);
     }
+
+    fn as_drawable(&self) -> &dyn Drawable {
+        self
+    }
 }
 
 impl Drawable for Grid {
@@ -331,3 +339,88 @@ impl Drawable for Grid {
         });
     }
 }
+
+
+
+pub(crate) struct Ball<'s> {
+    //renderWindow: &'s RenderWindow,
+    circle: Option<CircleShape<'s>>,
+    color: Color,
+    pub(crate) mass: f32,
+    pub(crate) position: Vector2f,
+    pub(crate) speed: Vector2f,
+    bounciness: f32
+}
+
+
+impl<'s> Ball<'s> {
+    pub(crate) fn new(position: Vector2f, mass: f32, initial_speed: Vector2f, color: Color) -> Self {
+        let mut me = Self {
+            //      renderWindow: renderWindow,
+            circle: None,
+            color: color,
+            mass: mass,
+            position: position,
+            speed: initial_speed,
+            bounciness: 0.97
+        };
+        me.create_circle_shape(10.);
+        me
+    }
+    fn create_circle_shape(&mut self, radius: f32) {
+        let mut circle = CircleShape::new(radius, 50);
+        circle.set_position(Vector2f::new(0f32, 0f32));
+        circle.set_fill_color(Color::BLUE);
+        circle.set_outline_color(self.color);
+        self.circle = Some(circle)
+    }
+}
+impl<'s> Thing<'s> for Ball<'s> {
+    fn get_mass(&self) -> f32 {
+        self.mass
+    }
+    fn set_mass(&mut self, mass: f32) {
+        self.mass = mass;
+    }
+    fn get_position(&self) -> Vector2f {
+        self.position
+    }
+    fn set_position(&mut self, new_position: Vector2f) {
+        self.position = new_position;
+    }
+    fn get_speed(&self) -> Vector2f {
+        self.speed
+    }
+    fn set_speed(&mut self, speed: Vector2f) {
+        self.speed = speed;
+    }
+    fn get_bounciness(&self) -> f32 {
+        self.bounciness
+    }
+    fn draw_on_screen(&mut self, screen: &mut Screen) {
+        //let y_position = self.renderWindow.size().y as i32 - self.position.y;
+        let screen_coords = screen.translate_to_screen_coords(self.position);
+        let radius_on_screen = self.mass as f32 / screen.scale;
+        if (screen_coords.x >= -radius_on_screen * 2. && screen_coords.x  <= screen.renderWindow.size().x as f32 + radius_on_screen * 2. &&
+            screen_coords.y >= -radius_on_screen * 2.  && screen_coords.y  <= screen.renderWindow.size().y as f32 + radius_on_screen * 2.) {
+            if (self.circle.is_none()) {
+                self.create_circle_shape(radius_on_screen);
+            }
+            self.circle.as_mut().unwrap().set_radius(radius_on_screen);
+            self.circle.as_mut().unwrap().set_position(Vector2f::new(screen_coords.x - radius_on_screen, screen_coords.y - radius_on_screen));
+            screen.draw_direct(self)
+        }
+        else {
+            self.circle = None;
+        }
+    }
+    fn as_drawable(&self) -> &dyn Drawable { self }
+}
+impl<'s> Drawable for Ball<'s> {
+    fn draw<'a: 'shader, 'texture, 'shader, 'shader_texture>(&'a self, target: &mut dyn RenderTarget, states: &RenderStates<'texture, 'shader, 'shader_texture>) {
+        if (self.circle.is_some()) {
+            target.draw(self.circle.as_ref().unwrap());
+        }
+    }
+}
+
