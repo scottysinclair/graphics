@@ -176,7 +176,10 @@ impl Physics {
         world.things.iter_mut().for_each(|thing : &mut Ball| {
             let xdiff = thing.position.x as i32 % self.grid_size;
             let ydiff = thing.position.y as i32 % self.grid_size;
-            if  (xdiff > grid_tolerance && xdiff < (self.grid_size - grid_tolerance)) &&  (ydiff > grid_tolerance && ydiff < (self.grid_size - grid_tolerance)) {
+            let ensure_the_bounce = thing.position.y < self.grid_size as f32;
+            let on_a_grid_coord = xdiff > grid_tolerance && xdiff < (self.grid_size - grid_tolerance) &&  (ydiff > grid_tolerance && ydiff < (self.grid_size - grid_tolerance));
+
+            if (ensure_the_bounce || on_a_grid_coord) {
                 let forces = self.calculate_forces_on(&thing);
                 let totalForce = forces.iter().fold(Vector2f::new(0., 0.), |a, b| { a.add(*b) });
                 let accel = totalForce / thing.mass as f32;
