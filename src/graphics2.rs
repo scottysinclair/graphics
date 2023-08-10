@@ -171,12 +171,12 @@ impl Physics {
         }
     }
     fn calculate(&self, world: &mut World, elapsedTime: Time) {
-        let grid_tolerance = 3;
+        let grid_tolerance = 5;
         let mut new_balls = Vec::new();
         world.things.iter_mut().for_each(|thing : &mut Ball| {
             let xdiff = thing.position.x as i32 % self.grid_size;
             let ydiff = thing.position.y as i32 % self.grid_size;
-            let ensure_the_bounce = thing.position.y < self.grid_size as f32;
+            let ensure_the_bounce = thing.position.y < grid_tolerance as f32 * 2.;
             let not_on_a_grid_coord = xdiff > grid_tolerance && xdiff < (self.grid_size - grid_tolerance) &&  (ydiff > grid_tolerance && ydiff < (self.grid_size - grid_tolerance));
             let outside_the_grid = thing.position.x < 0. || thing.position.y < 0.;
 
