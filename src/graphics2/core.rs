@@ -136,7 +136,7 @@ impl<'s> Ball<'s> {
             mass: mass,
             position: position,
             speed: initial_speed,
-            bounciness: 0.98
+            bounciness: 0.97
         };
         me.create_circle_shape(10.);
         me
@@ -184,8 +184,8 @@ impl<'s> Thing for Ball<'s> {
         //let y_position = self.renderWindow.size().y as i32 - self.position.y;
         let screen_coords = screen.translate_to_screen_coords(self.position);
         let radius_on_screen = self.mass as f32 / screen.scale;
-        if (screen_coords.x >= -radius_on_screen && (screen_coords.x + (2. * radius_on_screen)) <= screen.renderWindow.size().x as f32 &&
-            screen_coords.y >= -radius_on_screen && (screen_coords.y + (2. * radius_on_screen)) <= screen.renderWindow.size().y as f32) {
+        if (screen_coords.x >= -radius_on_screen * 2. && screen_coords.x  <= screen.renderWindow.size().x as f32 + radius_on_screen * 2. &&
+            screen_coords.y >= -radius_on_screen * 2.  && screen_coords.y  <= screen.renderWindow.size().y as f32 + radius_on_screen * 2.) {
             if (self.circle.is_none()) {
                 self.create_circle_shape(radius_on_screen);
             }
