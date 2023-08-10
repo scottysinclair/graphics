@@ -184,12 +184,15 @@ impl Physics {
                 let totalForce = forces.iter().fold(Vector2f::new(0., 0.), |a, b| { a.add(*b) });
                 let accel = totalForce / thing.mass as f32;
                 thing.speed += accel * elapsedTime.as_seconds();
-                thing.set_position(thing.get_position() + thing.speed);
-                if (thing.position.y <= 10.) {
+                let new_pos = thing.get_position() + thing.speed;
+                if (thing.position.x >= 0. && new_pos.y < 0. && thing.position.y >= 0.) {
                     let normal = Vector2f::new(0., -1.);
                     let dot_product = (thing.speed.x * 0.) + (thing.speed.y * 1.);
                     thing.speed.x += ((2. * normal.x * dot_product) * thing.get_bounciness());
                     thing.speed.y += ((2. * normal.y * dot_product) * thing.get_bounciness());
+                }
+                else {
+                    thing.set_position(thing.get_position() + thing.speed);
                 }
             }
         });
